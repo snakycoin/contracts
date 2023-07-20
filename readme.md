@@ -10,7 +10,6 @@ Open source codes for Snaky Ecosystem. LET's BUDL!
 - Docs: https://docs.snakycoin.vip
 - Twitter: https://twitter.com/snakycoin
 - Telegram: https://t.me/snakycoin
-- Whitepaper: https://docs.pandee.xyz
 
 ## About $SNAKY
 
