@@ -1,4 +1,4 @@
-!['logo'](public/pandee.jpeg)
+!['logo'](public/SNAKY.jpeg)
 # Snaky
 
 Open source codes for Snaky Ecosystem. LET's BUDL!
