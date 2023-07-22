@@ -5,11 +5,11 @@ Open source codes for Snaky Ecosystem. LET's BUDL!
 
 ## Official Links
 
-- Contract address: [0x06DeBDC97DBCAdE755dD65015c5eC36FAeC0c8F4](https://etherscan.io/token/0x06DeBDC97DBCAdE755dD65015c5eC36FAeC0c8F4)
+- Contract address: [0xA4971073A6b80b5b117efa0336C499E4204a387B](https://etherscan.io/token/0xA4971073A6b80b5b117efa0336C499E4204a387B)
 - Website: https://snakycoin.vip
 - Docs: https://docs.snakycoin.vip
 - Twitter: https://twitter.com/snakycoin
-- Telegram: https://t.me/snakycoin
+- Telegram: https://t.me/snakyportal
 
 ## About $SNAKY
 
